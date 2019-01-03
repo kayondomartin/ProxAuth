@@ -6,6 +6,7 @@ import android.bluetooth.BluetoothManager;
 import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter;
+import android.bluetooth.le.ScanRecord;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
 import android.content.Context;
@@ -22,6 +23,7 @@ import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -43,6 +45,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             accelXTextView, accelYTextView, accelZTextView,
             gyroXTextView, gyroYTextView, gyroZTextView;
     private Button startStopButton;
+    private ProgressBar progressBar;
 
     private SensorManager sensorManager;
     private Map<String, Sensor> sensors;
@@ -99,6 +102,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         gyroYTextView = findViewById(R.id.gyro_y_textView);
         gyroZTextView = findViewById(R.id.gyro_z_textView);
         startStopButton = findViewById(R.id.start_stop_button);
+        progressBar = findViewById(R.id.progressBar);
+        progressBar.setVisibility(View.GONE);
 
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         sensors = new HashMap<>();
@@ -162,6 +167,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         @Override
         public void onScanResult(int callbackType, ScanResult result) {
             super.onScanResult(callbackType, result);
+            ScanRecord scanRecord = result.getScanRecord();
 
             int rssi = result.getRssi();
             String record = seconds+"\t"+rssi+"\n";
@@ -194,6 +200,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         bleScanner.startScan(SCAN_FILTERS, SCAN_SETTINGS, scanCallback);
         registerSensorListeners();
         startTimer();
+        progressBar.setVisibility(View.VISIBLE);
         startStopButton.setText("STOP");
         isScanning = true;
 
@@ -204,6 +211,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         sensorManager.unregisterListener(this);
         startStopButton.setText("START");
         stopTimer();
+        progressBar.setVisibility(View.GONE);
 
         try{
             rssiRecordFileOutput.close();
@@ -231,7 +239,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         handler.removeCallbacks(runnable);
     }
 
-    private void updateSenosrRecords(int type, float[] values){
+    private void updateSensorRecords(int type, float[] values){
         String record = seconds + "\t"+values[0]+"\t"+values[1]+"\t"+values[2]+"\n";
         try{
             switch(type){
@@ -260,10 +268,10 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     @Override
     public void onSensorChanged(SensorEvent sensorEvent) {
         if(sensorEvent.sensor.getType() == Constants.ACCType){
-            updateSenosrRecords(Constants.ACCType,sensorEvent.values);
+            updateSensorRecords(Constants.ACCType,sensorEvent.values);
         }
         if(sensorEvent.sensor.getType() == Constants.GYROType){
-            updateSenosrRecords(Constants.GYROType,sensorEvent.values);
+            updateSensorRecords(Constants.GYROType,sensorEvent.values);
         }
     }
 
