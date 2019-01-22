@@ -21,6 +21,7 @@ import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ProgressBar;
@@ -37,6 +38,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+ import com.example.martin.proxauth.LineWorks.*;
 
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
 
@@ -54,12 +56,30 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private BluetoothAdapter btAdapter;
     private BluetoothLeScanner bleScanner;
 
+    private static List<Point> accelerometerPoints;
+    private static List<Point> rssi_accelPoints;
+    private static List<Point> gyroPoints;
+
+    List<Line> accelLine;
+    List<Line> gyroLine;
+    List<Line> rssi_accelLine;
+
+    List<Line> smoothedAccelLine;
+    List<Line> smoothedGyroLine;
+    List<Line> smoothedRSSIAccelLine;
+
+    List<Point> sampledAccel, sampledRSSI, sampledGryo;
+
+    private static LineSmoother lineSmoother = new LineSmoother();
+
     public static final String LOG_TAG = MainActivity.class.getSimpleName();
 
     private static final ParcelUuid EDDYSTONE_SERVICE_UUID = ParcelUuid.fromString("0000FEAA-0000-1000-8000-00805F9B34FB");
+    private static final String DeviceAddress = "E1:6E:58:BC:F1:82";
 
     private static final ScanFilter EDDYSTONE_SCAN_FILTER = new ScanFilter.Builder()
             .setServiceUuid(EDDYSTONE_SERVICE_UUID)
+            .setDeviceAddress(DeviceAddress)
             .build();
 
     private ScanSettings SCAN_SETTINGS =
@@ -116,6 +136,15 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         btAdapter = btManager.getAdapter();
         bleScanner = btAdapter.getBluetoothLeScanner();
 
+        accelerometerPoints = new ArrayList<>();
+        rssi_accelPoints = new ArrayList<>();
+        gyroPoints = new ArrayList<>();
+
+        accelLine = new ArrayList<>();
+        gyroLine = new ArrayList<>();
+        rssi_accelLine = new ArrayList<>();
+
+
         if(btAdapter == null || bleScanner == null){
             Toast.makeText(this,"Either bluetooth or BLE not supported!",Toast.LENGTH_SHORT);
             finish();
@@ -159,35 +188,69 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     }
 
     private void registerSensorListeners(){
-        sensorManager.registerListener(this,sensors.get(Constants.ACCKey),sensorManager.SENSOR_DELAY_NORMAL);
-        sensorManager.registerListener(this,sensors.get(Constants.GYROKey),sensorManager.SENSOR_DELAY_NORMAL);
+        sensorManager.registerListener(this,sensors.get(Constants.ACCKey),100000);
+        sensorManager.registerListener(this,sensors.get(Constants.GYROKey),100000);
     }
+
+
 
     private ScanCallback scanCallback = new ScanCallback() {
         @Override
         public void onScanResult(int callbackType, ScanResult result) {
             super.onScanResult(callbackType, result);
-            ScanRecord scanRecord = result.getScanRecord();
+            double currentTime = (double)System.currentTimeMillis();
 
             int rssi = result.getRssi();
-            String record = seconds+"\t"+rssi+"\n";
-            rssiTextView.setText(rssi);
+            rssiTextView.setText(rssi+"");
 
-            try{
-                rssiRecordFileOutput.write(record.getBytes());
-            } catch (IOException e) {
-                e.printStackTrace();
-            }finally {
+            getRSSIAcceleration(rssi,currentTime);
 
-            }
         }
     };
 
+    private static Point rssiLastUpdate = new Point();
+    private static double initial_velocity = 0;
+
+    private void getRSSIAcceleration(int rssi, double currentTime){
+
+        double position = getRSSIDistance(rssi);
+
+        if(rssi_accelPoints.isEmpty()){
+            rssi_accelPoints.add(new Point());
+            rssiLastUpdate.setX(currentTime);
+            rssiLastUpdate.setY(position);
+
+            return;
+        }
+        double distance = position-rssiLastUpdate.getY();
+        double timeElasped = (currentTime-rssiLastUpdate.getX())/1000.0;
+
+        if(timeElasped < 0.01){
+            return;
+        }
+
+
+        double acceleration = 2*(distance-initial_velocity*timeElasped)/(Math.pow(timeElasped,2));
+        double time = timeElasped+rssi_accelPoints.get(rssi_accelPoints.size()-1).getX();
+
+        initial_velocity = distance/(timeElasped);
+
+        rssiLastUpdate.setX(currentTime);
+        rssiLastUpdate.setY(position);
+        rssi_accelPoints.add(new Point(time,rssi));
+    }
+
+    private double getRSSIDistance(int RSSI){
+        double storage = (-68.0 - (double)RSSI)/20.0;
+        double pow = Math.pow(10,storage);
+        return pow;
+    }
+
     private void startScan(){
         try {
-            rssiRecordFileOutput = openFileOutput(Constants.RSSI_FILENAME, MODE_APPEND);
-            accelRecordFileOutput = openFileOutput(Constants.ACCELEROMETER_FILENAME, MODE_APPEND);
-            gyroRecordFileOutput = openFileOutput(Constants.GYROSCOPE_FILENAME, MODE_APPEND);
+            rssiRecordFileOutput = openFileOutput(Constants.RSSI_FILENAME, MODE_PRIVATE);
+            accelRecordFileOutput = openFileOutput(Constants.ACCELEROMETER_FILENAME, MODE_PRIVATE);
+            gyroRecordFileOutput = openFileOutput(Constants.GYROSCOPE_FILENAME, MODE_PRIVATE);
 
             clearFiles(Constants.ACCELEROMETER_FILENAME,Constants.GYROSCOPE_FILENAME, Constants.RSSI_FILENAME);
 
@@ -213,15 +276,78 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         stopTimer();
         progressBar.setVisibility(View.GONE);
 
-        try{
-            rssiRecordFileOutput.close();
-            accelRecordFileOutput.close();
-            gyroRecordFileOutput.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+
 
         isScanning = false;
+
+        for(int i=1;i<accelerometerPoints.size();i++){
+            accelLine.add(new Line(accelerometerPoints.get(i-1),accelerometerPoints.get(i)));
+        }
+
+        for(int i=1;i<rssi_accelPoints.size();i++){
+            rssi_accelLine.add(new Line(rssi_accelPoints.get(i-1),rssi_accelPoints.get(i)));
+        }
+
+        for(int i=1;i<gyroPoints.size();i++){
+            gyroLine.add(new Line(gyroPoints.get(i-1),gyroPoints.get(i)));
+        }
+
+
+        smoothedAccelLine = LineSmoother.smoothLine(accelLine);
+        smoothedRSSIAccelLine = LineSmoother.smoothLine(rssi_accelLine);
+        smoothedGyroLine = LineSmoother.smoothLine(gyroLine);
+
+        double end = (int) Math.min(smoothedAccelLine.get(smoothedAccelLine.size()-1).getPoint2().getX(),smoothedRSSIAccelLine.get(smoothedRSSIAccelLine.size()-1).getPoint2().getX());
+        sampledAccel = LineSmoother.sample(smoothedAccelLine,3,0.1,end);
+        sampledRSSI = LineSmoother.sample(smoothedRSSIAccelLine,3,0.1,end);
+
+        try{
+            for(int i=0;i<smoothedAccelLine.size();i++){
+                String record = smoothedAccelLine.get(i).getPoint1().getX()+"\t"+smoothedAccelLine.get(i).getPoint1().getY();
+                String Record = "";
+                if(i<=sampledAccel.size()-1) {
+                    Record = record+"\t"+sampledAccel.get(i).getX()+"\t"+sampledAccel.get(i).getY()+"\n";
+                }
+                else {
+                    Record = record+ "\n";
+                }
+
+                accelRecordFileOutput.write(Record.getBytes());
+            }
+            accelRecordFileOutput.write((smoothedAccelLine.get(smoothedAccelLine.size()-1).getPoint2().getX()+"\t"+smoothedAccelLine.get(smoothedAccelLine.size()-1).getPoint2().getY()).getBytes());
+
+
+            for(int i=0;i<smoothedRSSIAccelLine.size();i++){
+                String record = smoothedRSSIAccelLine.get(i).getPoint1().getX()+"\t"+smoothedRSSIAccelLine.get(i).getPoint1().getY();
+                String Record = "";
+                if(i<=sampledRSSI.size()-1) {
+                    Record = record+"\t"+sampledRSSI.get(i).getX()+"\t"+sampledRSSI.get(i).getY()+"\n";
+                }
+                else {
+                    Record = record+ "\n";
+                }
+                rssiRecordFileOutput.write(Record.getBytes());
+            }
+            rssiRecordFileOutput.write((smoothedRSSIAccelLine.get(smoothedRSSIAccelLine.size()-1).getPoint2().getX()+"\t"+smoothedRSSIAccelLine.get(smoothedRSSIAccelLine.size()-1).getPoint2().getY()).getBytes());
+
+            for(int i=0;i<smoothedGyroLine.size();i++){
+                String Record = smoothedGyroLine.get(i).getPoint1().getX()+"\t"+smoothedGyroLine.get(i).getPoint1().getY()+"\n";
+                gyroRecordFileOutput.write(Record.getBytes());
+            }
+            gyroRecordFileOutput.write((smoothedGyroLine.get(smoothedGyroLine.size()-1).getPoint2().getX()+"\t"+smoothedGyroLine.get(smoothedGyroLine.size()-1).getPoint2().getY()).getBytes());
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }finally{
+            try{
+                rssiRecordFileOutput.close();
+                accelRecordFileOutput.close();
+                gyroRecordFileOutput.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
     }
 
     private void startTimer(){
@@ -239,39 +365,53 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         handler.removeCallbacks(runnable);
     }
 
-    private void updateSensorRecords(int type, float[] values){
-        String record = seconds + "\t"+values[0]+"\t"+values[1]+"\t"+values[2]+"\n";
-        try{
-            switch(type){
-                case Sensor.TYPE_ACCELEROMETER:
-                    accelRecordFileOutput.write(record.getBytes());
-                    accelXTextView.setText(values[0]+"");
-                    accelYTextView.setText(values[1]+"");
-                    accelZTextView.setText(values[2]+"");
-                    break;
-                case Sensor.TYPE_GYROSCOPE:
-                    gyroRecordFileOutput.write(record.getBytes());
-                    gyroXTextView.setText(values[0]+"");
-                    gyroYTextView.setText(values[1]+"");
-                    gyroZTextView.setText(values[2]+"");
-                    break;
-            }
-        }catch (FileNotFoundException e){
-            e.printStackTrace();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }finally {
+    private void updateSensorRecords(int type, float[] values,long time){
 
+        switch(type){
+            case Sensor.TYPE_ACCELEROMETER:
+                accelXTextView.setText(values[0]+"");
+                accelYTextView.setText(values[1]+"");
+                accelZTextView.setText(values[2]+"");
+                break;
+            case Sensor.TYPE_GYROSCOPE:
+                gyroXTextView.setText(values[0]+"");
+                gyroYTextView.setText(values[1]+"");
+                gyroZTextView.setText(values[2]+"");
+                break;
         }
+
     }
+
+    private static Point lastAccelUpdate = new Point();
+    private static Point lastGyroUpdate = new Point();
 
     @Override
     public void onSensorChanged(SensorEvent sensorEvent) {
         if(sensorEvent.sensor.getType() == Constants.ACCType){
-            updateSensorRecords(Constants.ACCType,sensorEvent.values);
+            long currentTime = System.currentTimeMillis();
+            if (accelerometerPoints.isEmpty()){
+                accelerometerPoints.add(new Point(0,sensorEvent.values[2]));
+            }else{
+                double time = ((currentTime-lastAccelUpdate.getX())/1000.0) +accelerometerPoints.get(accelerometerPoints.size()-1).getX();
+                accelerometerPoints.add(new Point(time, sensorEvent.values[2]));
+            }
+
+            lastAccelUpdate.setX(currentTime);
+            lastAccelUpdate.setY(sensorEvent.values[2]);
+            updateSensorRecords(Constants.ACCType,sensorEvent.values,currentTime);
         }
         if(sensorEvent.sensor.getType() == Constants.GYROType){
-            updateSensorRecords(Constants.GYROType,sensorEvent.values);
+            long currentTime = System.currentTimeMillis();
+            if (gyroPoints.isEmpty()){
+                gyroPoints.add(new Point(0,sensorEvent.values[2]));
+            }else{
+                double time = ((currentTime-lastGyroUpdate.getX())/1000.0)+gyroPoints.get(gyroPoints.size()-1).getX();
+                gyroPoints.add(new Point(time, sensorEvent.values[2]));
+            }
+
+            lastGyroUpdate.setX(currentTime);
+            lastGyroUpdate.setY(sensorEvent.values[2]);
+            updateSensorRecords(Constants.GYROType,sensorEvent.values,currentTime);
         }
     }
 
