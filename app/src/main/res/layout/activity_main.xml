@@ -12,11 +12,11 @@
         android:layout_width="80dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="8dp"
-        android:layout_marginTop="48dp"
+        android:layout_marginTop="8dp"
         android:layout_marginEnd="8dp"
         android:text="0.00"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.432"
+        app:layout_constraintHorizontal_bias="0.426"
         app:layout_constraintStart_toEndOf="@+id/textView20"
         app:layout_constraintTop_toBottomOf="@+id/progressBar" />
 
@@ -74,10 +74,10 @@
         android:id="@+id/textView15"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="88dp"
+        android:layout_marginBottom="52dp"
         android:text="Gyroscope"
         android:textStyle="bold"
-        app:layout_constraintBottom_toTopOf="@+id/start_stop_button"
+        app:layout_constraintBottom_toTopOf="@+id/corr_textView"
         app:layout_constraintEnd_toEndOf="@+id/textView2"
         app:layout_constraintHorizontal_bias="0.0"
         app:layout_constraintStart_toStartOf="@+id/textView2" />
@@ -103,7 +103,7 @@
         android:text="Y: 0.000"
         app:layout_constraintBottom_toBottomOf="@+id/gyro_x_textView"
         app:layout_constraintEnd_toEndOf="@+id/accel_y_textView"
-        app:layout_constraintHorizontal_bias="1.0"
+        app:layout_constraintHorizontal_bias="0.979"
         app:layout_constraintStart_toStartOf="@+id/accel_y_textView"
         app:layout_constraintTop_toTopOf="@+id/gyro_x_textView"
         app:layout_constraintVertical_bias="0.0" />
@@ -139,7 +139,7 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="8dp"
         android:layout_marginEnd="8dp"
-        android:layout_marginBottom="88dp"
+        android:layout_marginBottom="140dp"
         android:background="@color/colorPrimaryDark"
         android:text="START"
         app:layout_constraintBottom_toBottomOf="parent"
@@ -157,4 +157,16 @@
         app:layout_constraintHorizontal_bias="0.509"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
+        android:id="@+id/corr_textView"
+        android:layout_width="95dp"
+        android:layout_height="19dp"
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp"
+        android:layout_marginBottom="28dp"
+        android:text="Corr: 0.00"
+        app:layout_constraintBottom_toTopOf="@+id/start_stop_button"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
 </android.support.constraint.ConstraintLayout>

@@ -16,7 +16,7 @@ public class LineSmoother {
         return mean;
     }
 
-    public static double CorrCoeff(List<Point> x, List<Point> y){
+    public static double corrCoeff(List<Point> x, List<Point> y){
         if(x.size() != y.size()) return 0;
 
         double mx = mean(x);

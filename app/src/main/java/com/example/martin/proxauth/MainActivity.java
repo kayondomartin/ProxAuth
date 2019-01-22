@@ -6,7 +6,6 @@ import android.bluetooth.BluetoothManager;
 import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter;
-import android.bluetooth.le.ScanRecord;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
 import android.content.Context;
@@ -21,7 +20,6 @@ import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ProgressBar;
@@ -34,6 +32,7 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -45,7 +44,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private TextView
             rssiTextView,
             accelXTextView, accelYTextView, accelZTextView,
-            gyroXTextView, gyroYTextView, gyroZTextView;
+            gyroXTextView, gyroYTextView, gyroZTextView, correlationTextView;
     private Button startStopButton;
     private ProgressBar progressBar;
 
@@ -121,6 +120,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         gyroXTextView = findViewById(R.id.gyro_x_textView);
         gyroYTextView = findViewById(R.id.gyro_y_textView);
         gyroZTextView = findViewById(R.id.gyro_z_textView);
+        correlationTextView = findViewById(R.id.corr_textView);
         startStopButton = findViewById(R.id.start_stop_button);
         progressBar = findViewById(R.id.progressBar);
         progressBar.setVisibility(View.GONE);
@@ -300,6 +300,11 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         double end = (int) Math.min(smoothedAccelLine.get(smoothedAccelLine.size()-1).getPoint2().getX(),smoothedRSSIAccelLine.get(smoothedRSSIAccelLine.size()-1).getPoint2().getX());
         sampledAccel = LineSmoother.sample(smoothedAccelLine,3,0.1,end);
         sampledRSSI = LineSmoother.sample(smoothedRSSIAccelLine,3,0.1,end);
+
+        double corr = LineSmoother.corrCoeff(sampledAccel,sampledRSSI);
+        DecimalFormat corrRound = new DecimalFormat("0.000");
+
+        correlationTextView.setText("Corr: "+corrRound.format(corr));
 
         try{
             for(int i=0;i<smoothedAccelLine.size();i++){
