@@ -307,10 +307,12 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         correlationTextView.setText("Corr: "+corrRound.format(corr));
 
         try{
-            for(int i=0;i<smoothedAccelLine.size();i++){
+            int smoothdAccelLength = smoothedAccelLine.size();
+            int sampledAccelLength = sampledAccel.size();
+            for(int i=0;i<smoothdAccelLength;i++){
                 String record = smoothedAccelLine.get(i).getPoint1().getX()+"\t"+smoothedAccelLine.get(i).getPoint1().getY();
                 String Record = "";
-                if(i<=sampledAccel.size()-1) {
+                if(i<sampledAccelLength) {
                     Record = record+"\t"+sampledAccel.get(i).getX()+"\t"+sampledAccel.get(i).getY()+"\n";
                 }
                 else {
@@ -319,7 +321,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
                 accelRecordFileOutput.write(Record.getBytes());
             }
-            accelRecordFileOutput.write((smoothedAccelLine.get(smoothedAccelLine.size()-1).getPoint2().getX()+"\t"+smoothedAccelLine.get(smoothedAccelLine.size()-1).getPoint2().getY()).getBytes());
+            accelRecordFileOutput.write((smoothedAccelLine.get(smoothdAccelLength-1).getPoint2().getX()+"\t"+smoothedAccelLine.get(smoothdAccelLength-1).getPoint2().getY()).getBytes());
 
 
             for(int i=0;i<smoothedRSSIAccelLine.size();i++){
