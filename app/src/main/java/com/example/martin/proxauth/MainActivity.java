@@ -14,6 +14,7 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.os.AsyncTask;
 import android.os.Handler;
 import android.os.ParcelUuid;
 import android.support.v4.app.ActivityCompat;
@@ -67,7 +68,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     List<Line> smoothedGyroLine;
     List<Line> smoothedRSSIAccelLine;
 
-    List<Point> sampledAccel, sampledRSSI, sampledGryo;
+    List<Point> sampledAccel, sampledRSSI, sampledGryo, correlation;
 
     private static LineSmoother lineSmoother = new LineSmoother();
 
@@ -103,7 +104,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private FileOutputStream
             rssiRecordFileOutput,
             accelRecordFileOutput,
-            gyroRecordFileOutput;
+            gyroRecordFileOutput,
+            correlationFileOutput;
 
     private Handler handler;
     private Runnable runnable;
@@ -143,6 +145,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         accelLine = new ArrayList<>();
         gyroLine = new ArrayList<>();
         rssi_accelLine = new ArrayList<>();
+        correlation = new ArrayList<>();
 
 
         if(btAdapter == null || bleScanner == null){
@@ -177,22 +180,13 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     @Override
     protected void onPause() {
         super.onPause();
-        sensorManager.unregisterListener(this);
     }
 
-    private void clearFiles(String ... fileNames) throws FileNotFoundException {
-        for(String name: fileNames){
-            PrintWriter printWriter = new PrintWriter(name);
-            printWriter.close();
-        }
-    }
 
     private void registerSensorListeners(){
         sensorManager.registerListener(this,sensors.get(Constants.ACCKey),100000);
         sensorManager.registerListener(this,sensors.get(Constants.GYROKey),100000);
     }
-
-
 
     private ScanCallback scanCallback = new ScanCallback() {
         @Override
@@ -246,13 +240,13 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         return pow;
     }
 
+
     private void startScan(){
         try {
             rssiRecordFileOutput = openFileOutput(Constants.RSSI_FILENAME, MODE_PRIVATE);
             accelRecordFileOutput = openFileOutput(Constants.ACCELEROMETER_FILENAME, MODE_PRIVATE);
             gyroRecordFileOutput = openFileOutput(Constants.GYROSCOPE_FILENAME, MODE_PRIVATE);
-
-            clearFiles(Constants.ACCELEROMETER_FILENAME,Constants.GYROSCOPE_FILENAME, Constants.RSSI_FILENAME);
+            correlationFileOutput = openFileOutput(Constants.CORR_FILENAME,MODE_PRIVATE);
 
         } catch (FileNotFoundException e) {
             e.printStackTrace();
@@ -266,6 +260,12 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         progressBar.setVisibility(View.VISIBLE);
         startStopButton.setText("STOP");
         isScanning = true;
+
+    }
+
+    private void updateResults(){
+        UpdateAsyncTasks updateAsyncTasks = new UpdateAsyncTasks();
+        updateAsyncTasks.execute(accelerometerPoints,rssi_accelPoints);
 
     }
 
@@ -343,6 +343,12 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             }
             gyroRecordFileOutput.write((smoothedGyroLine.get(smoothedGyroLine.size()-1).getPoint2().getX()+"\t"+smoothedGyroLine.get(smoothedGyroLine.size()-1).getPoint2().getY()).getBytes());
 
+            for(int i = 0; i<correlation.size();i++){
+                Point p = correlation.get(i);
+                String record = p.getX()+"\t"+p.getY()+"\n";
+                correlationFileOutput.write(record.getBytes());
+            }
+
         } catch (IOException e) {
             e.printStackTrace();
         }finally{
@@ -350,6 +356,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 rssiRecordFileOutput.close();
                 accelRecordFileOutput.close();
                 gyroRecordFileOutput.close();
+                correlationFileOutput.close();
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -361,11 +368,12 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         runnable = new Runnable() {
             @Override
             public void run() {
-                seconds+=100;
-                handler.postDelayed(this,100);
+                seconds+=1000;
+                handler.postDelayed(this,1000);
+                updateResults();
             }
         };
-        handler.postDelayed(runnable,100);
+        handler.postDelayed(runnable,1000);
     }
 
     private void stopTimer(){
@@ -420,10 +428,47 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             lastGyroUpdate.setY(sensorEvent.values[2]);
             updateSensorRecords(Constants.GYROType,sensorEvent.values,currentTime);
         }
+
     }
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int i) {
 
     }
+
+    private class UpdateAsyncTasks extends AsyncTask<List<Point>,Void,Point>{
+
+
+        public UpdateAsyncTasks(){
+        }
+
+        @Override
+        protected Point doInBackground(List<Point>... lists) {
+
+            List<Line> rssiList = new ArrayList<>();
+            for(int i=1; i<lists[0].size();i++){
+                rssiList.add(new Line(lists[0].get(i-1),lists[0].get(i)));
+            }
+
+            List<Line> accelList = new ArrayList<>();
+
+            for(int i=1; i<lists[1].size();i++){
+                accelList.add(new Line(lists[1].get(i-1),lists[1].get(i)));
+            }
+
+            double end = (int) Math.min(rssiList.get(rssiList.size()-1).getPoint2().getX(),accelList.get(accelList.size()-1).getPoint2().getX());
+            List<Point> rssiSample = LineSmoother.sample(rssiList,0,0.1,end);
+            List<Point> accelSample = LineSmoother.sample(accelList,0,0.1,end);
+            double correlation = LineSmoother.corrCoeff(rssiSample,accelSample);
+            return new Point(end,correlation);
+        }
+
+        @Override
+        protected void onPostExecute(Point point) {
+            correlation.add(point);
+            DecimalFormat corrRound = new DecimalFormat("0.000");
+            correlationTextView.setText(corrRound.format(point.getY())+"");
+        }
+    }
+
 }

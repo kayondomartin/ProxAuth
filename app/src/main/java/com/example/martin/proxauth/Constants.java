@@ -10,4 +10,5 @@ public class Constants {
     public static String RSSI_FILENAME = "rssi.txt";
     public static String ACCELEROMETER_FILENAME = "accelerometer.txt";
     public static String GYROSCOPE_FILENAME = "gyroscope.txt";
+    public static String CORR_FILENAME = "correlation.txt";
 }
