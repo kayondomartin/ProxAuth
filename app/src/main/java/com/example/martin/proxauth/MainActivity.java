@@ -21,10 +21,15 @@ import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.transition.ChangeBounds;
+import android.transition.ChangeImageTransform;
+import android.transition.TransitionManager;
+import android.transition.TransitionSet;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.animation.RotateAnimation;
 import android.widget.Button;
-import android.widget.ProgressBar;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -33,7 +38,6 @@ import com.estimote.sdk.SystemRequirementsChecker;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -41,14 +45,15 @@ import java.util.List;
 import java.util.Map;
  import com.example.martin.proxauth.LineWorks.*;
 
+@SuppressWarnings("ALL")
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
 
-    private TextView
-            rssiTextView,
-            accelXTextView, accelYTextView, accelZTextView,
-            gyroXTextView, gyroYTextView, gyroZTextView, correlationTextView;
-    private Button startStopButton;
-    private ProgressBar progressBar;
+    private ViewGroup transitionsContainer;
+    private Button controlButton;
+    private ImageView directionIconImage;
+    private TextView processTextView;
+    private TextView addressTextView;
+
 
     private SensorManager sensorManager;
     private Map<String, Sensor> sensors;
@@ -74,6 +79,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private static LineSmoother lineSmoother = new LineSmoother();
 
     public static final String LOG_TAG = MainActivity.class.getSimpleName();
+
+    private static int rssiSize = 0;
+    private static int accelSize = 0;
 
     private static final ParcelUuid EDDYSTONE_SERVICE_UUID = ParcelUuid.fromString("0000FEAA-0000-1000-8000-00805F9B34FB");
     private static final String DeviceAddress = "E1:6E:58:BC:F1:82";
@@ -116,17 +124,13 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        rssiTextView = findViewById(R.id.rssi_textView);
-        accelXTextView = findViewById(R.id.accel_x_textView);
-        accelYTextView = findViewById(R.id.accel_y_textView);
-        accelZTextView = findViewById(R.id.accel_z_textView);
-        gyroXTextView = findViewById(R.id.gyro_x_textView);
-        gyroYTextView = findViewById(R.id.gyro_y_textView);
-        gyroZTextView = findViewById(R.id.gyro_z_textView);
-        correlationTextView = findViewById(R.id.corr_textView);
-        startStopButton = findViewById(R.id.start_stop_button);
-        progressBar = findViewById(R.id.progressBar);
-        progressBar.setVisibility(View.GONE);
+        transitionsContainer = findViewById(R.id.transitionsContainer);
+        controlButton = findViewById(R.id.control_button);
+        directionIconImage = findViewById(R.id.rotationIconView);
+        processTextView = findViewById(R.id.processtextView);
+        processTextView.setVisibility(View.INVISIBLE);
+        addressTextView = findViewById(R.id.device_addressView);
+
 
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         sensors = new HashMap<>();
@@ -148,6 +152,10 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         rssi_accelLine = new ArrayList<>();
         correlation = new ArrayList<>();
 
+        smoothedAccelLine = new ArrayList<>();
+        smoothedRSSIAccelLine = new ArrayList<>();
+        smoothedGyroLine = new ArrayList<>();
+
 
         if(btAdapter == null || bleScanner == null){
             Toast.makeText(this,"Either bluetooth or BLE not supported!",Toast.LENGTH_SHORT);
@@ -160,16 +168,17 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     MY_PERMISSION_REQUEST_READ_CONTACTS);
         }
 
-        startStopButton.setOnClickListener(new View.OnClickListener() {
+        controlButton.setOnClickListener(new View.OnClickListener() {
+
             @Override
-            public void onClick(View view) {
-                if(isScanning){
-                    stopScan();
-                }else{
-                    startScan();
-                }
+            public void onClick(View v) {
+                startScan();
+                controlButton.setVisibility(View.INVISIBLE);
+                processTextView.setVisibility(View.VISIBLE);
+
             }
         });
+
     }
 
     @Override
@@ -189,6 +198,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         sensorManager.registerListener(this,sensors.get(Constants.GYROKey),100000);
     }
 
+    private Point rssiInitial = null;
+    private double initialTime = 0;
     private ScanCallback scanCallback = new ScanCallback() {
         @Override
         public void onScanResult(int callbackType, ScanResult result) {
@@ -196,14 +207,24 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             double currentTime = (double)System.currentTimeMillis();
 
             int rssi = result.getRssi();
-            rssiTextView.setText(rssi+"");
-
-            getRSSIAcceleration(rssi,currentTime);
-
+            if(rssiSize == 0){
+                if(rssiInitial == null){
+                    rssiInitial = new Point(0.0, rssi);
+                    initialTime = currentTime/1000;
+                }else {
+                    Line newLine = new Line(rssiInitial, new Point((currentTime / 1000) - initialTime, rssi));
+                    rssi_accelLine.add(newLine);
+                    rssiSize++;
+                }
+            }else{
+                Line newLine = new Line(rssi_accelLine.get(rssiSize++-1).getPoint2(),new Point((currentTime/1000)-initialTime,rssi));
+                rssi_accelLine.add(newLine);
+            }
+            addressTextView.setText(result.getDevice().getAddress());
         }
     };
 
-    private static Point rssiLastUpdate = new Point();
+    /*private static Point rssiLastUpdate = new Point();
     private static double initial_velocity = 0;
 
     private void getRSSIAcceleration(int rssi, double currentTime){
@@ -241,7 +262,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         return pow;
     }
 
-
+*/
     private void startScan(){
         try {
             rssiRecordFileOutput = openFileOutput(Constants.RSSI_FILENAME, MODE_PRIVATE);
@@ -258,97 +279,49 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         bleScanner.startScan(SCAN_FILTERS, SCAN_SETTINGS, scanCallback);
         registerSensorListeners();
         startTimer();
-        progressBar.setVisibility(View.VISIBLE);
-        startStopButton.setText("STOP");
         isScanning = true;
 
     }
 
     private void updateResults(){
         UpdateAsyncTasks updateAsyncTasks = new UpdateAsyncTasks();
-        updateAsyncTasks.execute(accelerometerPoints,rssi_accelPoints);
+        updateAsyncTasks.execute();
 
     }
 
     private void stopScan(){
         bleScanner.stopScan(scanCallback);
         sensorManager.unregisterListener(this);
-        startStopButton.setText("START");
         stopTimer();
-        progressBar.setVisibility(View.GONE);
 
 
 
         isScanning = false;
 
-        for(int i=1;i<accelerometerPoints.size();i++){
-            accelLine.add(new Line(accelerometerPoints.get(i-1),accelerometerPoints.get(i)));
-        }
-
-        for(int i=1;i<rssi_accelPoints.size();i++){
-            rssi_accelLine.add(new Line(rssi_accelPoints.get(i-1),rssi_accelPoints.get(i)));
-        }
-
-        for(int i=1;i<gyroPoints.size();i++){
-            gyroLine.add(new Line(gyroPoints.get(i-1),gyroPoints.get(i)));
-        }
-
-
-        smoothedAccelLine = LineSmoother.smoothLine(accelLine);
-        smoothedRSSIAccelLine = LineSmoother.smoothLine(rssi_accelLine);
-        smoothedGyroLine = LineSmoother.smoothLine(gyroLine);
-
-        double end = (int) Math.min(smoothedAccelLine.get(smoothedAccelLine.size()-1).getPoint2().getX(),smoothedRSSIAccelLine.get(smoothedRSSIAccelLine.size()-1).getPoint2().getX());
-        sampledAccel = LineSmoother.sample(smoothedAccelLine,3,0.1,end);
-        sampledRSSI = LineSmoother.sample(smoothedRSSIAccelLine,3,0.1,end);
-
-        double corr = LineSmoother.corrCoeff(sampledAccel,sampledRSSI);
-        DecimalFormat corrRound = new DecimalFormat("0.000");
-
-        correlationTextView.setText("Corr: "+corrRound.format(corr));
-
         try{
-            int smoothdAccelLength = smoothedAccelLine.size();
-            int sampledAccelLength = sampledAccel.size();
-            for(int i=0;i<smoothdAccelLength;i++){
-                String record = smoothedAccelLine.get(i).getPoint1().getX()+"\t"+smoothedAccelLine.get(i).getPoint1().getY();
-                String Record = "";
-                if(i<sampledAccelLength) {
-                    Record = record+"\t"+sampledAccel.get(i).getX()+"\t"+sampledAccel.get(i).getY()+"\n";
-                }
-                else {
-                    Record = record+ "\n";
-                }
+            int sampleSize = sampledRSSI.size();
 
-                accelRecordFileOutput.write(Record.getBytes());
+            for(int i=0;i<sampleSize;i++){
+                Point rssiPoint = sampledRSSI.get(i);
+                Point accelPoint = sampledAccel.get(i);
+                String rssiRecord = rssiPoint.getX()+"\t"+rssiPoint.getY()+"\n";
+                String accelRecord = accelPoint.getX()+"\t"+accelPoint.getY()+"\n";
+                accelRecordFileOutput.write(accelRecord.getBytes());
+                rssiRecordFileOutput.write(rssiRecord.getBytes());
             }
-            accelRecordFileOutput.write((smoothedAccelLine.get(smoothdAccelLength-1).getPoint2().getX()+"\t"+smoothedAccelLine.get(smoothdAccelLength-1).getPoint2().getY()).getBytes());
 
-
-            for(int i=0;i<smoothedRSSIAccelLine.size();i++){
-                String record = smoothedRSSIAccelLine.get(i).getPoint1().getX()+"\t"+smoothedRSSIAccelLine.get(i).getPoint1().getY();
-                String Record = "";
-                if(i<=sampledRSSI.size()-1) {
-                    Record = record+"\t"+sampledRSSI.get(i).getX()+"\t"+sampledRSSI.get(i).getY()+"\n";
-                }
-                else {
-                    Record = record+ "\n";
-                }
-                rssiRecordFileOutput.write(Record.getBytes());
-            }
-            rssiRecordFileOutput.write((smoothedRSSIAccelLine.get(smoothedRSSIAccelLine.size()-1).getPoint2().getX()+"\t"+smoothedRSSIAccelLine.get(smoothedRSSIAccelLine.size()-1).getPoint2().getY()).getBytes());
-
-            for(int i=0;i<smoothedGyroLine.size();i++){
+           /* for(int i=0;i<smoothedGyroLine.size();i++){
                 String Record = smoothedGyroLine.get(i).getPoint1().getX()+"\t"+smoothedGyroLine.get(i).getPoint1().getY()+"\n";
                 gyroRecordFileOutput.write(Record.getBytes());
             }
             gyroRecordFileOutput.write((smoothedGyroLine.get(smoothedGyroLine.size()-1).getPoint2().getX()+"\t"+smoothedGyroLine.get(smoothedGyroLine.size()-1).getPoint2().getY()).getBytes());
-
+            */
             for(int i = 0; i<correlation.size();i++){
                 Point p = correlation.get(i);
                 String record = p.getX()+"\t"+p.getY()+"\n";
                 correlationFileOutput.write(record.getBytes());
             }
+
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -361,65 +334,102 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             } catch (IOException e) {
                 e.printStackTrace();
             }
+
+            processTextView.setVisibility(View.INVISIBLE);
+            controlButton.setVisibility(View.VISIBLE);
         }
 
     }
 
+    private void motionGesture(boolean rotate, boolean tofro, boolean expanded, float degrees){
+        if(tofro){
+            TransitionManager.beginDelayedTransition(transitionsContainer, new TransitionSet()
+                    .addTransition(new ChangeBounds())
+                    .addTransition(new ChangeImageTransform()));
+
+            expanded = !expanded;
+            ViewGroup.LayoutParams params = directionIconImage.getLayoutParams();
+            params.height = expanded? ViewGroup.LayoutParams.MATCH_PARENT:
+                    ViewGroup.LayoutParams.WRAP_CONTENT;
+            directionIconImage.setLayoutParams(params);
+
+            directionIconImage.setScaleType(expanded? ImageView.ScaleType.FIT_END:
+                    ImageView.ScaleType.FIT_CENTER);
+        }else if(rotate){
+            final RotateAnimation rotateAnimation = new RotateAnimation(-degrees, degrees,
+                    RotateAnimation.RELATIVE_TO_SELF, 0.5f,
+                    RotateAnimation.RELATIVE_TO_SELF,0.5f);
+
+            rotateAnimation.setDuration(0);
+            rotateAnimation.setFillAfter(true);
+            directionIconImage.startAnimation(rotateAnimation);
+        }
+    }
 
 
+    boolean expanded;
+    float degrees = 45;
+    int count = 0;
+    String process = "Authenticating";
     private void startTimer(){
+        step = 1;
         runnable = new Runnable() {
             @Override
             public void run() {
                 seconds+=1000;
-                handler.postDelayed(this,1000);
+                if(step == 1){
+                    expanded = !expanded;
+                    motionGesture(false,true,expanded, degrees);
+                }else{
+                    degrees = -degrees;
+                    motionGesture(true,false,expanded, degrees);
+                }
+                if(count++ == 2){
+                    count = 0;
+                    process = "Authenticating";
+                }
+                process+=" .";
+                processTextView.setText(seconds+"");
+
                 updateResults();
+                handler.postDelayed(this,1000);
+
             }
         };
         handler.postDelayed(runnable,1000);
     }
 
     private void stopTimer(){
+        seconds = 0;
         handler.removeCallbacks(runnable);
-    }
-
-    private void updateSensorRecords(int type, float[] values,long time){
-
-        switch(type){
-            case Sensor.TYPE_ACCELEROMETER:
-                accelXTextView.setText(values[0]+"");
-                accelYTextView.setText(values[1]+"");
-                accelZTextView.setText(values[2]+"");
-                break;
-            case Sensor.TYPE_GYROSCOPE:
-                gyroXTextView.setText(values[0]+"");
-                gyroYTextView.setText(values[1]+"");
-                gyroZTextView.setText(values[2]+"");
-                break;
-        }
-
     }
 
     private static Point lastAccelUpdate = new Point();
     private static Point lastGyroUpdate = new Point();
 
+    private double initialAccelTime = 0;
+    private Point initialAccel = null;
+
     @Override
     public void onSensorChanged(SensorEvent sensorEvent) {
+        double currentTime = (double) System.currentTimeMillis();
         if(sensorEvent.sensor.getType() == Constants.ACCType){
-            long currentTime = System.currentTimeMillis();
-            if (accelerometerPoints.isEmpty()){
-                accelerometerPoints.add(new Point(0,sensorEvent.values[2]));
-            }else{
-                double time = ((currentTime-lastAccelUpdate.getX())/1000.0) +accelerometerPoints.get(accelerometerPoints.size()-1).getX();
-                accelerometerPoints.add(new Point(time, sensorEvent.values[2]));
-            }
+           if(accelSize == 0){
+               if(initialAccel == null){
+                   initialAccelTime = currentTime;
+                   initialAccel = new Point(0.0,sensorEvent.values[2]);
+               }else{
+                   Line newLine = new Line(initialAccel,new Point((currentTime-initialAccelTime)/1000,sensorEvent.values[2]));
+                   accelLine.add(newLine);
+                   accelSize++;
+               }
+           }else{
+               Line newLine = new Line(accelLine.get(accelSize++-1).getPoint2(),new Point((currentTime-initialAccelTime)/1000,sensorEvent.values[2]));
+               accelLine.add(newLine);
+           }
 
-            lastAccelUpdate.setX(currentTime);
-            lastAccelUpdate.setY(sensorEvent.values[2]);
-            updateSensorRecords(Constants.ACCType,sensorEvent.values,currentTime);
         }
         if(sensorEvent.sensor.getType() == Constants.GYROType){
-            long currentTime = System.currentTimeMillis();
             if (gyroPoints.isEmpty()){
                 gyroPoints.add(new Point(0,sensorEvent.values[2]));
             }else{
@@ -429,7 +439,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
             lastGyroUpdate.setX(currentTime);
             lastGyroUpdate.setY(sensorEvent.values[2]);
-            updateSensorRecords(Constants.GYROType,sensorEvent.values,currentTime);
+            //updateSensorRecords(Constants.GYROType,sensorEvent.values,currentTime);
         }
 
     }
@@ -439,39 +449,52 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
     }
 
-    private class UpdateAsyncTasks extends AsyncTask<List<Point>,Void,Point>{
+    private static int lastAccelAdded = 0;
+    private static int lastRssiAdded = 0;
+    private static int step = 0;
 
+    private class UpdateAsyncTasks extends AsyncTask<Void, Double,Double>{
 
-        public UpdateAsyncTasks(){
+        @Override
+        protected Double doInBackground(Void... voids) {
+            if(step == 1) {
+
+                smoothedRSSIAccelLine = LineSmoother.smoothLine(rssi_accelLine);
+                smoothedAccelLine = LineSmoother.smoothLine(accelLine);
+
+                double end = (int) Math.min(smoothedAccelLine.get(smoothedAccelLine.size() - 1).getPoint2().getX(), smoothedRSSIAccelLine.get(smoothedRSSIAccelLine.size() - 1).getPoint2().getX());
+                sampledAccel = LineSmoother.sample(smoothedAccelLine, 0, 0.1, end);
+                sampledRSSI = LineSmoother.sample(smoothedRSSIAccelLine, 0, 0.1, end);
+
+                double corr = LineSmoother.corrCoeff(sampledAccel, sampledRSSI);
+
+                return corr;
+            }
+            return null;
         }
 
         @Override
-        protected Point doInBackground(List<Point>... lists) {
-
-            List<Line> rssiList = new ArrayList<>();
-            for(int i=1; i<lists[0].size();i++){
-                rssiList.add(new Line(lists[0].get(i-1),lists[0].get(i)));
+        protected void onPostExecute(Double aDouble) {
+            if(step == 1){
+                correlation.add(new Point(seconds,aDouble));
             }
 
-            List<Line> accelList = new ArrayList<>();
-
-            for(int i=1; i<lists[1].size();i++){
-                accelList.add(new Line(lists[1].get(i-1),lists[1].get(i)));
+            if(aDouble == null){
+                stopScan();
             }
+            if((seconds<=10000) && (seconds >=6000) && aDouble >= 0.5){
+                Toast.makeText(MainActivity.this,"To and Fro Authenticated!!",Toast.LENGTH_SHORT).show();
+                step = 2;
 
-            double end = (int) Math.min(rssiList.get(rssiList.size()-1).getPoint2().getX(),accelList.get(accelList.size()-1).getPoint2().getX());
-            List<Point> rssiSample = LineSmoother.sample(rssiList,0,0.1,end);
-            List<Point> accelSample = LineSmoother.sample(accelList,0,0.1,end);
-            double correlation = LineSmoother.corrCoeff(rssiSample,accelSample);
-            return new Point(end,correlation);
-        }
-
-        @Override
-        protected void onPostExecute(Point point) {
-            correlation.add(point);
-            DecimalFormat corrRound = new DecimalFormat("0.000");
-            correlationTextView.setText(corrRound.format(point.getY())+"");
+            }else if(seconds> 10000 && step == 1){
+                Toast.makeText(MainActivity.this,"Authentication Failed!!",Toast.LENGTH_SHORT).show();
+                stopScan();
+            }else if(seconds>10000){
+                stopScan();
+            }
         }
     }
+
+
 
 }

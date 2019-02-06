@@ -28,4 +28,6 @@ dependencies {
     implementation 'org.altbeacon:android-beacon-library:2+'
     implementation 'com.estimote:sdk:0.10.4@aar'
 
+    implementation "com.andkulikov:transitionseverywhere:1.8.1"
+
 }
