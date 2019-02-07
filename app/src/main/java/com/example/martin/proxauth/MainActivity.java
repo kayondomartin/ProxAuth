@@ -326,7 +326,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 accelCorrFileOutput.close();
 
                 if(toFroAuthenticated){
-                    step = 2;
                     Toast.makeText(MainActivity.this,"Step 1 Completed!!", Toast.LENGTH_SHORT).show();
                     controlButton.setText("Next");
                 }else{
