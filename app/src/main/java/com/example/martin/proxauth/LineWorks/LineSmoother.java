@@ -1,5 +1,7 @@
 package com.example.martin.proxauth.LineWorks;
 
+import android.util.Log;
+
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -91,22 +93,24 @@ public class LineSmoother {
         return min;
     }
 
-    public static List<Line> smoothLine(ConcurrentHashMap<Integer, Line> lineSegments, int end){
-        if(lineSegments.size() < 4){
+    public static List<Line> smoothLine(ConcurrentHashMap<Integer, Point> linePoints, Point finalPoint, int size){
+        if(size < 5){
             List<Line> lines = new ArrayList<>();
-            Iterator<Integer> iterator = lineSegments.keySet().iterator();
-
-            while(iterator.hasNext()){
-                lines.add(lineSegments.get(iterator.next()));
+            for(int i=1;i<size;i++){
+                lines.add(new Line(linePoints.get(i),linePoints.get(i+1)));
             }
 
             return lines;
         }
 
         List<Line> smoothedLine = new ArrayList<>();
-        List<Point> points = getPoints(lineSegments, end);
+        List<Point> points = new ArrayList<>();
 
-        smoothedLine.add(lineSegments.get(0));
+        for(int i=1; i<=size;i++){
+            points.add(new Point(linePoints.get(i)));
+        }
+
+        smoothedLine.add(new Line(new Point(linePoints.get(1)), new Point(linePoints.get(2))));
 
         Point newPoint = points.get(1);
 
@@ -116,7 +120,7 @@ public class LineSmoother {
             smoothedLine.add(new Line(lastPoint, newPoint));
         }
 
-        Line lastSegment = lineSegments.get(lineSegments.size()-1);
+        Line lastSegment = new Line(new Point(linePoints.get(size-1)),new Point(linePoints.get(size)));
         smoothedLine.add(new Line(newPoint,new Point(lastSegment.getPoint1())));
 
         smoothedLine.add(lastSegment);
@@ -124,7 +128,7 @@ public class LineSmoother {
         return smoothedLine;
     }
 
-    private static Point smoothPoint(List<Point> points) {
+    private static Point smoothPoint(final List<Point> points) {
 
         double avgX = 0;
         double avgY = 0;
@@ -145,16 +149,16 @@ public class LineSmoother {
         return new Point(newX,newY);
     }
 
-    private static List<Point> getPoints(ConcurrentHashMap<Integer, Line> map, int end){
-        List<Point> points = new ArrayList<>();
-        Iterator<Integer> iterator = map.keySet().iterator();
-        int i;
+    private static List<Point> getPoints(ConcurrentHashMap<Integer, Line> map, Point lastPoint){
 
-        while(iterator.hasNext() && (i=iterator.next()) <= end){
-            points.add(map.get(i).getPoint1());
+        List<Point> points = new ArrayList<>();
+
+        for(Object o: map.entrySet()){
+            Line line = (Line) o;
+            points.add(line.getPoint1());
         }
-        points.add(map.get(end).getPoint2());
-        return points;
+
+       return points;
     }
 
 

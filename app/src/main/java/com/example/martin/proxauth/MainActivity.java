@@ -68,16 +68,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private BluetoothAdapter btAdapter;
     private BluetoothLeScanner bleScanner;
 
-    List<Line> accelLine;
-    List<Line> gyroLine;
-    List<Line> rssi_accelLine;
-    List<Line> rssi_gyroLine;
-
-    List<Line> smoothedAccelLine;
-    List<Line> smoothedGyroLine;
-    List<Line> smoothedRSSIAccelLine;
-    List<Line> smoothedRSSIGyroLine;
-
     static List<Point> sampledAccel,
                 sampledRSSIAccel,
                 sampledRSSIGyro,
@@ -85,12 +75,10 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 accelCorr,
                 gyroCorr;
 
-    private ConcurrentHashMap<Integer, Line> rssi_accelLineMap;
-    private ConcurrentHashMap<Integer, Line> rssi_gyroLineMap;
-    private ConcurrentHashMap<Integer, Line> gyroMap;
-    private ConcurrentHashMap<Integer, Line> accelMap;
-
-    private static LineSmoother lineSmoother = new LineSmoother();
+    private ConcurrentHashMap<Integer, Point> rssi_accelPointMap;
+    private ConcurrentHashMap<Integer, Point> rssi_gyroPointMap;
+    private ConcurrentHashMap<Integer, Point> gyroPointMap;
+    private ConcurrentHashMap<Integer, Point> accelPointMap;
 
     public static final String LOG_TAG = MainActivity.class.getSimpleName();
     private static int step = 0;
@@ -163,23 +151,13 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         btAdapter = btManager.getAdapter();
         bleScanner = btAdapter.getBluetoothLeScanner();
 
-        accelLine = new ArrayList<>();
-        gyroLine = new ArrayList<>();
-        rssi_accelLine = new ArrayList<>();
-        rssi_gyroLine = new ArrayList<>();
-
-        smoothedAccelLine = new ArrayList<>();
-        smoothedRSSIAccelLine = new ArrayList<>();
-        smoothedGyroLine = new ArrayList<>();
-        smoothedRSSIGyroLine = new ArrayList<>();
-
         accelCorr = new ArrayList<>();
         gyroCorr = new ArrayList<>();
 
-        rssi_gyroLineMap = new ConcurrentHashMap<>();
-        rssi_accelLineMap = new ConcurrentHashMap<>();
-        gyroMap = new ConcurrentHashMap<>();
-        accelMap = new ConcurrentHashMap<>();
+        rssi_gyroPointMap = new ConcurrentHashMap<>();
+        rssi_accelPointMap = new ConcurrentHashMap<>();
+        gyroPointMap = new ConcurrentHashMap<>();
+        accelPointMap = new ConcurrentHashMap<>();
 
         if(btAdapter == null || bleScanner == null){
             Toast.makeText(this,"Either bluetooth or BLE not supported!",Toast.LENGTH_SHORT);
@@ -251,9 +229,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     }
 
                     double time = elapsedTime + lastRSSIAccelUpdate.getX();
-                    Point newPoint = new Point(time, rssi);
-                    rssi_accelLineMap.put(++rssiAccelSize,new Line(lastRSSIGyroUpdate, newPoint));
-                    lastRSSIAccelUpdate = newPoint;
+                    rssi_accelPointMap.put(++rssiAccelSize,lastRSSIAccelUpdate);
+                    lastRSSIAccelUpdate = new Point(time, rssi);
                 }
             }else if(step ==2){
                 if(lastRSSIGyroUpdate == null){
@@ -271,55 +248,15 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     if(elapsedTime < 0.1){
                         return;
                     }
-                    Log.e(MainActivity.class.getSimpleName(),"GYRORSSIValue: "+rssi);
                     double time = elapsedTime + lastRSSIGyroUpdate.getX();
-                    Point newPoint = new Point(time, rssi);
-                    rssi_gyroLineMap.put(++rssiGyroSize, new Line(lastRSSIGyroUpdate, newPoint));
-                    lastRSSIGyroUpdate = newPoint;
+                    rssi_gyroPointMap.put(++rssiGyroSize,lastRSSIGyroUpdate);
+                    lastRSSIGyroUpdate = new Point(time, rssi);
                 }
             }
             addressTextView.setText(result.getDevice().getAddress());
         }
     };
 
-    /*private static Point rssiLastUpdate = new Point();
-    private static double initial_velocity = 0;
-
-    private void getRSSIAcceleration(int rssi, double currentTime){
-
-        double position = getRSSIDistance(rssi);
-
-        if(rssi_accelPoints.isEmpty()){
-            rssi_accelPoints.add(new Point());
-            rssiLastUpdate.setX(currentTime);
-            rssiLastUpdate.setY(position);
-
-            return;
-        }
-        double distance = position-rssiLastUpdate.getY();
-        double timeElasped = (currentTime-rssiLastUpdate.getX())/1000.0;
-
-        if(timeElasped < 0.01){
-            return;
-        }
-
-
-        double acceleration = 2*(distance-initial_velocity*timeElasped)/(Math.pow(timeElasped,2));
-        double time = timeElasped+rssi_accelPoints.get(rssi_accelPoints.size()-1).getX();
-
-        initial_velocity = distance/(timeElasped);
-
-        rssiLastUpdate.setX(currentTime);
-        rssiLastUpdate.setY(position);
-        rssi_accelPoints.add(new Point(time,rssi));
-    }
-
-    private double getRSSIDistance(int RSSI){
-        double storage = (-68.0 - (double)RSSI)/20.0;
-        double pow = Math.pow(10,storage);
-        return pow;
-    }
-    */
     private void startScan(){
         try {
 
@@ -413,15 +350,12 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         }catch(IOException e){
             Log.e(MainActivity.class.getSimpleName(),e.getMessage());
         }finally {
-            accelLine.clear();
+            gyroPointMap.clear();
+            rssi_accelPointMap.clear();
+            rssi_gyroPointMap.clear();
+            accelPointMap.clear();
             accelCorr.clear();
-            rssi_accelLine.clear();
-            smoothedGyroLine.clear();
-            smoothedRSSIAccelLine.clear();
-            smoothedRSSIGyroLine.clear();
-            smoothedAccelLine.clear();
             gyroCorr.clear();
-            rssi_gyroLine.clear();
         }
     }
 
@@ -470,7 +404,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                             updateAsyncTasks.cancel(false);
                         }
                         updateAsyncTasks = new UpdateAsyncTasks();
-                        updateAsyncTasks.execute(accelMap,rssi_accelLineMap);
+                        updateAsyncTasks.execute(new Point(lastAccelUpdate),new Point(lastRSSIAccelUpdate));
                     }else{
                         if(updateAsyncTasks != null) {
                             updateAsyncTasks.cancel(false);
@@ -490,7 +424,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                             updateAsyncTasks.cancel(false);
                         }
                          updateAsyncTasks = new UpdateAsyncTasks();
-                         updateAsyncTasks.execute(gyroMap,rssi_gyroLineMap);
+                         updateAsyncTasks.execute(new Point(lastGyroUpdate),new Point(lastRSSIGyroUpdate));
                     }else{
                         if(updateAsyncTasks != null) {
                             updateAsyncTasks.cancel(false);
@@ -536,7 +470,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 double time = (currentTime - initialAccelTime) / 1000;
 
                 Point newPoint = new Point(time, sensorEvent.values[2]);
-                accelMap.put(++accelSize,new Line(lastAccelUpdate, new Point()));
+                accelMap.put(++accelSize,new Line(lastAccelUpdate, new Point(newPoint)));
                 lastAccelUpdate = newPoint;
             }
         }
@@ -549,7 +483,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 double time = (currentTime-initialGyroTime)/1000;
 
                 Point newPoint = new Point(time, sensorEvent.values[2]);
-                gyroMap.put(++gyroSize, new Line(lastGyroUpdate, newPoint));
+                gyroMap.put(++gyroSize, new Line(lastGyroUpdate, new Point(newPoint)));
                 lastGyroUpdate = newPoint;
             }
         }
@@ -562,17 +496,16 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     }
 
 
-    private class UpdateAsyncTasks extends AsyncTask<ConcurrentHashMap<Integer, Line>,Void,Void>{
+    private class UpdateAsyncTasks extends AsyncTask<Point,Void,Void>{
 
         @Override
-        protected Void doInBackground(ConcurrentHashMap<Integer,Line>... curves) {
+        protected Void doInBackground(Point... lastPoints) {
             if(step == 1){
-                int [] sizes = {accelSize, rssiAccelSize};
-                Point point =  Process.process(step,sizes,curves[0],curves[1]);
+                Point point =  Process.process(step,lastPoints[0], lastPoints[1],accelMap,rssi_accelLineMap);
                 accelCorr.add(point);
             }else if(step == 2){
                 int [] sizes = {gyroSize, rssiGyroSize};
-                Point point =  Process.process(step,sizes,curves[0],curves[1]);
+                Point point =  Process.process(step,lastPoints[0], lastPoints[1],gyroMap, rssi_gyroLineMap);
                 gyroCorr.add(point);
             }
 
@@ -583,9 +516,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
     private static class Process{
 
-        public static Point process(int flag, int[] sizes, ConcurrentHashMap<Integer, Line>... maps){
-           List<Line> smoothedCurve1 = LineSmoother.smoothLine(maps[0], sizes[0]);
-           List<Line> smoothedCurve2 = LineSmoother.smoothLine(maps[1], sizes[1]);
+        public static Point process(int flag, Point lastPoint1, Point lastPoint2, ConcurrentHashMap<Integer, Line>... maps){
+           List<Line> smoothedCurve1 = LineSmoother.smoothLine(maps[0], lastPoint1);
+           List<Line> smoothedCurve2 = LineSmoother.smoothLine(maps[1], lastPoint2);
 
            Log.e(MainActivity.class.getSimpleName(),"Flag: "+flag);
 
