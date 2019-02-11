@@ -299,6 +299,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             String record;
             if (step == 1) {
                 int accelSampleSize = sampledAccel.size();
+                int accelRSSISampleSize = sampledRSSIAccel.size();
+
                 for (; i < accelSampleSize; i++) {
                     record = sampledRSSIAccel.get(i).getX() + "\t" + sampledRSSIAccel.get(i).getY() + "\t" + sampledAccel.get(i).getY() + "\n";
                     rssiAccelRecordFileOutput.write(record.getBytes());
@@ -521,11 +523,14 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
     private static class Process{
 
-        public static Point process(int flag, int size1, int size2, ConcurrentHashMap<Integer, Point>... lineMaps){
-           List<Line> smoothedCurve1 = LineSmoother.smoothLine(lineMaps[0], size1);
-           List<Line> smoothedCurve2 = LineSmoother.smoothLine(lineMaps[1], size2);
+        public static Point process(int flag, int sizes0, int sizes1, ConcurrentHashMap<Integer, Point>... lineMaps){
+           List<Line> smoothedCurve1 = LineSmoother.smoothLine(lineMaps[0], sizes0);
+           List<Line> smoothedCurve2 = LineSmoother.smoothLine(lineMaps[1], sizes1);
 
            Log.e(MainActivity.class.getSimpleName(),"Flag: "+flag);
+
+           int size1 = smoothedCurve1.size();
+           int size2 = smoothedCurve2.size();
 
            double end = (int) Math.min(smoothedCurve1.get(size1-1).getPoint2().getX(), smoothedCurve2.get(size2-1).getPoint2().getX());
            List<Point> sampled1 = LineSmoother.sample(smoothedCurve1,0,0.1,end);
