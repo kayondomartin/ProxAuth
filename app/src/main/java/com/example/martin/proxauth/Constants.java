@@ -7,8 +7,8 @@ public class Constants {
     public static int ACCType = Sensor.TYPE_ACCELEROMETER;
     public static String GYROKey = "GYROSCOPE";
     public static int GYROType = Sensor.TYPE_GYROSCOPE;
-    public static String RSSI_FILENAME = "rssi.txt";
-    public static String ACCELEROMETER_FILENAME = "accelerometer.txt";
-    public static String GYROSCOPE_FILENAME = "gyroscope.txt";
-    public static String CORR_FILENAME = "correlation.txt";
+    public static String RSSI_ACCEL_FILENAME = "rssiAccel.txt";
+    public static String GYROCORR_FILENAME = "gyroCorrelation.txt";
+    public static String RSSI_GYRO_FILENAME = "rssiGyroscope.txt";
+    public static String ACCELCORR_FILENAME = "accelCorrelation.txt";
 }

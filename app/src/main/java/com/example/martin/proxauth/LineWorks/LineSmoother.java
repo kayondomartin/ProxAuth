@@ -1,7 +1,9 @@
 package com.example.martin.proxauth.LineWorks;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class LineSmoother {
 
@@ -52,21 +54,22 @@ public class LineSmoother {
         return points;
     }
 
-    public static List<Line> standardize(List<Line> lines){
-        List<Point> points = getPoints(lines);
+
+    public static List<Point> standardize(List<Point> points){
         double min = getMin(points);
         double max = getMax(points);
+        List<Point> standardized = new ArrayList<>();
 
-        for(Line line: lines){
-            double standard = 2.0*((line.getPoint1().getY()-min)/(max-min)) - 1.0;
-            line.getPoint1().setY(standard);
+        int i;
+        int length = points.size();
+        for(i=0;i<length;i++){
+            Point point = points.get(i);
+            double standard = 2*((point.getY()-min)/(max-min)) - 1;
+            standardized.add(new Point(point.getX(),standard));
         }
-
-        double standard = 2*((lines.get(lines.size()-1).getPoint2().getY())/(max-min)) - 1.0;
-        lines.get(lines.size()-1).getPoint2().setY(standard);
-
-        return lines;
+        return standardized;
     }
+
 
     private static double getMax(List<Point> points){
         double max = points.get(0).getY();
@@ -88,11 +91,20 @@ public class LineSmoother {
         return min;
     }
 
-    public static List<Line> smoothLine(List<Line> lineSegments){
-        if(lineSegments.size() < 4) return lineSegments;
+    public static List<Line> smoothLine(ConcurrentHashMap<Integer, Line> lineSegments, int end){
+        if(lineSegments.size() < 4){
+            List<Line> lines = new ArrayList<>();
+            Iterator<Integer> iterator = lineSegments.keySet().iterator();
+
+            while(iterator.hasNext()){
+                lines.add(lineSegments.get(iterator.next()));
+            }
+
+            return lines;
+        }
 
         List<Line> smoothedLine = new ArrayList<>();
-        List<Point> points = getPoints(lineSegments);
+        List<Point> points = getPoints(lineSegments, end);
 
         smoothedLine.add(lineSegments.get(0));
 
@@ -133,14 +145,28 @@ public class LineSmoother {
         return new Point(newX,newY);
     }
 
+    private static List<Point> getPoints(ConcurrentHashMap<Integer, Line> map, int end){
+        List<Point> points = new ArrayList<>();
+        Iterator<Integer> iterator = map.keySet().iterator();
+        int i;
+
+        while(iterator.hasNext() && (i=iterator.next()) <= end){
+            points.add(map.get(i).getPoint1());
+        }
+        points.add(map.get(end).getPoint2());
+        return points;
+    }
+
+
     private static List<Point> getPoints(List<Line> lineSegments) {
 
         List<Point> points =  new ArrayList<>();
+        Iterator itr = lineSegments.iterator();
 
-        for(Line segment: lineSegments){
+        while(itr.hasNext()){
+            Line segment = (Line)itr.next();
             points.add(new Point(segment.getPoint1()));
         }
-
         points.add(new Point(lineSegments.get(lineSegments.size()-1).getPoint2()));
         return points;
     }
