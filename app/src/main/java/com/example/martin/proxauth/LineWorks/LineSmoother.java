@@ -93,7 +93,7 @@ public class LineSmoother {
         return min;
     }
 
-    public static List<Line> smoothLine(ConcurrentHashMap<Integer, Point> linePoints, Point finalPoint, int size){
+    public static List<Line> smoothLine(ConcurrentHashMap<Integer, Point> linePoints, int size){
         if(size < 5){
             List<Line> lines = new ArrayList<>();
             for(int i=1;i<size;i++){

@@ -229,7 +229,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     }
 
                     double time = elapsedTime + lastRSSIAccelUpdate.getX();
-                    rssi_accelPointMap.put(++rssiAccelSize,lastRSSIAccelUpdate);
+                    rssi_accelPointMap.put(++rssiAccelSize,new Point(lastRSSIAccelUpdate));
                     lastRSSIAccelUpdate = new Point(time, rssi);
                 }
             }else if(step ==2){
@@ -249,7 +249,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                         return;
                     }
                     double time = elapsedTime + lastRSSIGyroUpdate.getX();
-                    rssi_gyroPointMap.put(++rssiGyroSize,lastRSSIGyroUpdate);
+                    rssi_gyroPointMap.put(++rssiGyroSize,new Point(lastRSSIGyroUpdate));
                     lastRSSIGyroUpdate = new Point(time, rssi);
                 }
             }
@@ -404,7 +404,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                             updateAsyncTasks.cancel(false);
                         }
                         updateAsyncTasks = new UpdateAsyncTasks();
-                        updateAsyncTasks.execute(new Point(lastAccelUpdate),new Point(lastRSSIAccelUpdate));
+                        updateAsyncTasks.execute(accelSize,rssiAccelSize);
                     }else{
                         if(updateAsyncTasks != null) {
                             updateAsyncTasks.cancel(false);
@@ -424,7 +424,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                             updateAsyncTasks.cancel(false);
                         }
                          updateAsyncTasks = new UpdateAsyncTasks();
-                         updateAsyncTasks.execute(new Point(lastGyroUpdate),new Point(lastRSSIGyroUpdate));
+                         updateAsyncTasks.execute(gyroSize,rssiGyroSize);
                     }else{
                         if(updateAsyncTasks != null) {
                             updateAsyncTasks.cancel(false);
@@ -460,30 +460,36 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
     @Override
     public void onSensorChanged(SensorEvent sensorEvent) {
+
         double currentTime = (double) System.currentTimeMillis();
+
         if(sensorEvent.sensor.getType() == Constants.ACCType && step ==1){
 
             if(lastAccelUpdate == null){
+
                 initialAccelTime = currentTime;
                 lastAccelUpdate = new Point(0.0,sensorEvent.values[2]);
             }else {
-                double time = (currentTime - initialAccelTime) / 1000;
 
+                double time = (currentTime - initialAccelTime) / 1000;
+                accelPointMap.put(++accelSize,new Point(lastAccelUpdate));
                 Point newPoint = new Point(time, sensorEvent.values[2]);
-                accelMap.put(++accelSize,new Line(lastAccelUpdate, new Point(newPoint)));
                 lastAccelUpdate = newPoint;
             }
         }
         if(sensorEvent.sensor.getType() == Constants.GYROType && step == 2){
+
             Log.e(MainActivity.class.getSimpleName(),"GYRO: "+sensorEvent.values[2]);
+
             if(lastGyroUpdate == null){
+
                 initialGyroTime = currentTime;
                 lastGyroUpdate = new Point(0.0,sensorEvent.values[2]);
             }else{
-                double time = (currentTime-initialGyroTime)/1000;
 
+                double time = (currentTime-initialGyroTime)/1000;
+                gyroPointMap.put(++gyroSize, new Point(lastGyroUpdate));
                 Point newPoint = new Point(time, sensorEvent.values[2]);
-                gyroMap.put(++gyroSize, new Line(lastGyroUpdate, new Point(newPoint)));
                 lastGyroUpdate = newPoint;
             }
         }
@@ -496,16 +502,15 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     }
 
 
-    private class UpdateAsyncTasks extends AsyncTask<Point,Void,Void>{
+    private class UpdateAsyncTasks extends AsyncTask<Integer,Void,Void>{
 
         @Override
-        protected Void doInBackground(Point... lastPoints) {
+        protected Void doInBackground(Integer... sizes) {
             if(step == 1){
-                Point point =  Process.process(step,lastPoints[0], lastPoints[1],accelMap,rssi_accelLineMap);
+                Point point =  Process.process(step, sizes[0], sizes[1], accelPointMap, rssi_accelPointMap);
                 accelCorr.add(point);
             }else if(step == 2){
-                int [] sizes = {gyroSize, rssiGyroSize};
-                Point point =  Process.process(step,lastPoints[0], lastPoints[1],gyroMap, rssi_gyroLineMap);
+                Point point =  Process.process(step, sizes[0], sizes[1], gyroPointMap, rssi_gyroPointMap);
                 gyroCorr.add(point);
             }
 
@@ -516,18 +521,12 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
     private static class Process{
 
-        public static Point process(int flag, Point lastPoint1, Point lastPoint2, ConcurrentHashMap<Integer, Line>... maps){
-           List<Line> smoothedCurve1 = LineSmoother.smoothLine(maps[0], lastPoint1);
-           List<Line> smoothedCurve2 = LineSmoother.smoothLine(maps[1], lastPoint2);
+        public static Point process(int flag, int size1, int size2, ConcurrentHashMap<Integer, Point>... lineMaps){
+           List<Line> smoothedCurve1 = LineSmoother.smoothLine(lineMaps[0], size1);
+           List<Line> smoothedCurve2 = LineSmoother.smoothLine(lineMaps[1], size2);
 
            Log.e(MainActivity.class.getSimpleName(),"Flag: "+flag);
 
-           int size1 = smoothedCurve1.size();
-           int size2 = smoothedCurve2.size();
-
-           if(size1 == 0 || size2 == 0) {
-               return new Point();
-           }
            double end = (int) Math.min(smoothedCurve1.get(size1-1).getPoint2().getX(), smoothedCurve2.get(size2-1).getPoint2().getX());
            List<Point> sampled1 = LineSmoother.sample(smoothedCurve1,0,0.1,end);
            List<Point> sampled2 = LineSmoother.sample(smoothedCurve2,0,0.1,end);
