@@ -10,7 +10,7 @@ public class Point {
         this.y = y;
     }
 
-    public Point(Point point){
+    public Point(Point point) throws NullPointerException{
         this.x = point.x;
         this.y = point.y;
     }

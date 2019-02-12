@@ -293,16 +293,24 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         processTextView.setVisibility(View.INVISIBLE);
         controlButton.setVisibility(View.VISIBLE);
         isScanning = false;
+        accelSize = 0;
+        rssiAccelSize = 0;
+        gyroSize = 0;
+        rssiGyroSize = 0;
+        lastRSSIAccelUpdate = null;
+        lastRSSIGyroUpdate = null;
+        lastAccelUpdate = null;
+        lastGyroUpdate = null;
 
         try {
-            int i = 0;
+            int i;
             String record;
             if (step == 1) {
                 int accelSampleSize = sampledAccel.size();
                 int accelRSSISampleSize = sampledRSSIAccel.size();
 
-                for (; i < accelSampleSize; i++) {
-                    record = sampledRSSIAccel.get(i).getX() + "\t" + sampledRSSIAccel.get(i).getY() + "\t" + sampledAccel.get(i).getY() + "\n";
+                for (i=0; i < accelRSSISampleSize; i++) {
+                    record = sampledRSSIAccel.get(i).getX() + "\t" + sampledRSSIAccel.get(i).getY() + "\t" + sampledAccel.get(i).getY()+ "\n";
                     rssiAccelRecordFileOutput.write(record.getBytes());
                 }
                 rssiAccelRecordFileOutput.close();
@@ -509,6 +517,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         @Override
         protected Void doInBackground(Integer... sizes) {
             if(step == 1){
+                Log.e(LOG_TAG, "Accel: "+accelPointMap+"\n RSSI: "+rssi_accelPointMap);
                 Point point =  Process.process(step, sizes[0], sizes[1], accelPointMap, rssi_accelPointMap);
                 accelCorr.add(point);
             }else if(step == 2){
