@@ -46,6 +46,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Queue;
+import java.util.Timer;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -53,6 +54,23 @@ import com.example.martin.proxauth.LineWorks.*;
 
 @SuppressWarnings("ALL")
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
+
+    private float[]gyro = new float[3];
+    private float[]gyroMatrix = new float[3];
+    private float[]gyroOrientation = new float[3];
+    private float[]magent = new float[3];
+    private float[]accel = new float[3];
+    private float[]accMagOrientation = new float[3];
+    private float[]fusedOrientation = new float[3];
+    private float[]rotationMatrix = new float[9];
+
+    public static final float EPSILON = 0.000000001f;
+    private static final float NS2S = 1.0f / 1000000000.0f;
+    private float timestamp;
+    private boolean initState = true;
+    public static final int TIME_CONSTANT = 30;
+    public static final float FILTER_COEFFICIENT = 0.98f;
+    private Timer fuseTimer = new Timer();
 
     private ViewGroup transitionsContainer;
     private Button controlButton;
@@ -132,6 +150,16 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        int i;
+        for(i=0;i<3;i++){
+            gyroOrientation[i] = 0.0f;
+        }
+        for(i=0;i<9;i++){
+            gyroOrientation[i] = 0.0f;
+        }
+        for(i=0;i<9;i+=4){
+            gyroOrientation[i] = 1.0f;
+        }
         transitionsContainer = findViewById(R.id.transitionsContainer);
         controlButton = findViewById(R.id.control_button);
         directionIconImage = findViewById(R.id.rotationIconView);
@@ -198,6 +226,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private void registerSensorListeners(){
         sensorManager.registerListener(this,sensors.get(Constants.ACCKey),100000);
         sensorManager.registerListener(this,sensors.get(Constants.GYROKey),100000);
+        sensorManager.registerListener(this,sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD),100000);
     }
 
     private Point lastRSSIAccelUpdate = null;
