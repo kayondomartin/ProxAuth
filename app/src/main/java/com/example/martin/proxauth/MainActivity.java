@@ -57,7 +57,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
     private float[]gyro = new float[3];
     private float[]gyroMatrix = new float[3];
-    private float[]gyroOrientation = new float[3];
+    private float[]gyroOrientation = new float[9];
     private float[]magent = new float[3];
     private float[]accel = new float[3];
     private float[]accMagOrientation = new float[3];
@@ -336,9 +336,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             String record;
             if (step == 1) {
                 int accelSampleSize = sampledAccel.size();
-                int accelRSSISampleSize = sampledRSSIAccel.size();
 
-                for (i=0; i < accelRSSISampleSize; i++) {
+                for (i=0; i < accelSampleSize; i++) {
                     record = sampledRSSIAccel.get(i).getX() + "\t" + sampledRSSIAccel.get(i).getY() + "\t" + sampledAccel.get(i).getY()+ "\n";
                     rssiAccelRecordFileOutput.write(record.getBytes());
                 }
@@ -398,6 +397,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         }
     }
 
+
     private void motionGesture(boolean rotate, boolean tofro, boolean expanded, float degrees){
         if(tofro){
             TransitionManager.beginDelayedTransition(transitionsContainer, new TransitionSet()
@@ -438,7 +438,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     expanded = !expanded;
                     motionGesture(false,true,expanded, degrees);
 
-                    if(seconds <= 7000){
+                    if(seconds <= 11000){
                         if(updateAsyncTasks != null){
                             updateAsyncTasks.cancel(false);
                         }
@@ -458,7 +458,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     degrees = -degrees;
                     motionGesture(true,false,expanded, degrees);
 
-                    if(seconds <= 7000){
+                    if(seconds <= 11000){
                         if(updateAsyncTasks != null){
                             updateAsyncTasks.cancel(false);
                         }
@@ -546,7 +546,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         @Override
         protected Void doInBackground(Integer... sizes) {
             if(step == 1){
-                Log.e(LOG_TAG, "Accel: "+accelPointMap+"\n RSSI: "+rssi_accelPointMap);
                 Point point =  Process.process(step, sizes[0], sizes[1], accelPointMap, rssi_accelPointMap);
                 accelCorr.add(point);
             }else if(step == 2){
@@ -557,6 +556,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             return null;
         }
 
+        @Override
+        protected void onPostExecute(Void aVoid) {
+        }
     }
 
     private static class Process{
@@ -565,26 +567,31 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
            List<Line> smoothedCurve1 = LineSmoother.smoothLine(lineMaps[0], sizes0);
            List<Line> smoothedCurve2 = LineSmoother.smoothLine(lineMaps[1], sizes1);
 
-           Log.e(MainActivity.class.getSimpleName(),"Flag: "+flag);
-
-           int size1 = smoothedCurve1.size();
-           int size2 = smoothedCurve2.size();
-
-           double end = (int) Math.min(smoothedCurve1.get(size1-1).getPoint2().getX(), smoothedCurve2.get(size2-1).getPoint2().getX());
-           List<Point> sampled1 = LineSmoother.sample(smoothedCurve1,0,0.1,end);
-           List<Point> sampled2 = LineSmoother.sample(smoothedCurve2,0,0.1,end);
+           List<Point> sampled1 = LineSmoother.sample(smoothedCurve1,0,0.05);
+           List<Point> sampled2 = LineSmoother.sample(smoothedCurve2,0,0.05);
 
            sampled1 = LineSmoother.standardize(sampled1);
            sampled2 = LineSmoother.standardize(sampled2);
 
-           double corr = LineSmoother.corrCoeff(sampled1,sampled2);
+
+           int size1 = sampled1.size();
+           int size2 = sampled2.size();
+
+           int end = size1 > size2 ? size2 : size1;
+           double corr = -10.0;
+
+           try{
+               corr =  LineSmoother.corrCoeff(sampled1.subList(0,end-1),sampled2.subList(0,end-1));
+           }catch (LineSmoother.NonEqualException e){
+               Log.e(LOG_TAG,e.toString());
+           }
 
            if(flag == 1){
-               sampledAccel = sampled1;
-               sampledRSSIAccel = sampled2;
+               sampledAccel = sampled1.subList(0,end-1);
+               sampledRSSIAccel = sampled2.subList(0,end-1);
            }else{
-               sampledGyro = sampled1;
-               sampledRSSIGyro = sampled2;
+               sampledGyro = sampled1.subList(0,end-1);
+               sampledRSSIGyro = sampled2.subList(0,end-1);
            }
 
            return new Point(end, corr);

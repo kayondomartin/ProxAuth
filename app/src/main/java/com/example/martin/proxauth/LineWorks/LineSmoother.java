@@ -20,28 +20,52 @@ public class LineSmoother {
         return mean;
     }
 
-    public static double corrCoeff(List<Point> x, List<Point> y){
-        if(x.size() != y.size()) return 0;
+    public static class NonEqualException extends Exception{
+        private int num1;
+        private int num2;
 
-        double mx = mean(x);
-        double my = mean(y);
-
-        double Exy = 0, Ex2 = 0, Ey2 = 0;
-
-        for(int i=0;i<x.size();i++){
-            Exy += (x.get(i).getY()-mx)*(y.get(i).getY()-my);
-            Ex2 += Math.pow((x.get(i).getY()-mx),2);
-            Ey2 += Math.pow((y.get(i).getY()-my),2);
+        public NonEqualException(int x, int y){
+            num1 = x; num2 = y;
         }
 
-        return Exy/(Math.sqrt(Ex2*Ey2));
+        public String toString(){
+            return "NonEqualException: Num1 = "+num1+", Num2 = "+num2+"\n";
+        }
+    }
+    public static double corrCoeff(List<Point> x, List<Point> y) throws NonEqualException{
+
+            int sizeX = x.size();
+            int sizeY = y.size();
+
+            if (sizeX != sizeY) {
+                throw new NonEqualException(sizeX,sizeY);
+            }
+            double mx = mean(x);
+            double my = mean(y);
+
+            double Exy = 0, Ex2 = 0, Ey2 = 0;
+
+
+            Log.e(LineSmoother.class.getSimpleName(), "CorrSize: " + sizeX);
+
+            for (int i = 0; i < sizeX; i++) {
+                Exy += (x.get(i).getY() - mx) * (y.get(i).getY() - my);
+                Ex2 += Math.pow((x.get(i).getY() - mx), 2);
+                Ey2 += Math.pow((y.get(i).getY() - my), 2);
+            }
+
+            double corr = Exy / (Math.sqrt(Ex2 * Ey2));
+            Log.e(LineSmoother.class.getSimpleName(), "Corr: " + corr);
+            return corr;
     }
 
-    public static List<Point> sample(List<Line> lines,double start, double step, double end){
+    public static List<Point> sample(List<Line> lines,double start, double step){
 
         List<Point> points = new ArrayList<>();
+        double i;
+        double end = lines.get(lines.size()-1).getPoint2().getX();
 
-        for(double i=start;i<=end;i+=step){
+        for(i=start;i<=end;i+=step){
             for(Line line: lines ){
                 if((line.getPoint1().getX()<=i && line.getPoint2().getX()>= i) || (line.getPoint1().getX()>=i && line.getPoint2().getX()<= i) ){
                     double m = line.gradient();
